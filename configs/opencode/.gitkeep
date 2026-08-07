@@ -1,0 +1,12 @@
+# Place your opencode config here. Bind-mounted to /home/agent/.config/opencode.
+# This is where opencode.json and auth live (global config location on Linux).
+# Example opencode.json:
+# {
+#   "$schema": "https://opencode.ai/config.json",
+#   "model": "anthropic/claude-sonnet-4-5",
+#   "provider": {
+#     "anthropic": { "options": { "apiKey": "{env:ANTHROPIC_API_KEY}" } }
+#   }
+# }
+#
+# Auth created via `opencode auth login` on the host is also stored here.

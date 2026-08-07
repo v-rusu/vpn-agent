@@ -1,0 +1,3 @@
+# Place your gcloud config here (contents of ~/.config/gcloud).
+# This is bind-mounted to /home/agent/.config/gcloud in the container.
+# Copy from your host:  cp -R ~/.config/gcloud/* configs/gcloud/

@@ -1,0 +1,11 @@
+# Place your WireGuard config here as wg0.conf (and any wg*.conf).
+# Bind-mounted to /etc/wireguard in the container.
+# The entrypoint runs `wg-quick up wg0` when /etc/wireguard/wg0.conf exists.
+#
+# Requires the container to run with NET_ADMIN capability and /dev/net/tun,
+# which are configured in docker-compose.yml.
+#
+# If your config uses `DNS = ...`, wg-quick edits /etc/resolv.conf directly
+# (the image deliberately ships no `resolvconf`, since the Debian package needs
+# systemd-resolved, which isn't available in a container). If DNS resolution
+# still fails, point DNS at a public resolver.

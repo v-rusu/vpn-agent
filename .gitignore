@@ -1,0 +1,19 @@
+# Keep the config directory structure but ignore any real contents (secrets).
+configs/gcloud/*
+configs/kube/*
+configs/opencode/*
+configs/wireguard/*
+configs/cursor/*
+
+# Preserve placeholders and any in-repo sample docs.
+!configs/**/.gitkeep
+
+# Secrets and runtime data.
+.env
+/workspaces/*
+
+# macOS / editor cruft
+.DS_Store
+*.swp
+.idea/
+.vscode/

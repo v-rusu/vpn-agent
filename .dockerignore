@@ -1,0 +1,9 @@
+# Don't copy host config (secrets) into the image build context.
+# Bind-mounts handle config at runtime instead.
+configs/
+.git/
+.gitignore
+.dockerignore
+README.md
+docker-compose.yml
+**/.DS_Store

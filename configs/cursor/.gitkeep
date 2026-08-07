@@ -1,0 +1,6 @@
+# Cursor terminal agent config/state. Bind-mounted to /home/agent/.cursor.
+# This is where the Cursor agent stores local settings and session data.
+#
+# Auth options (either works):
+#   1. Set CURSOR_API_KEY in .env (simplest for headless containers).
+#   2. Run `agent login` inside the container (browser-based OAuth).

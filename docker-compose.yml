@@ -1,0 +1,77 @@
+# Agentic dev container.
+#
+# Two ways to run, sharing the same config (x-agent):
+#
+#   1) One-shot (ephemeral):
+#        docker compose run --rm agent            # bash
+#        docker compose run --rm agent opencode
+#
+#   2) Long-lived daemon (tmux sessions persist across attach/detach):
+#        docker compose up -d agent-daemon
+#        docker compose exec --user agent agent-daemon tmux new -s main
+#        docker compose exec --user agent agent-daemon tmux attach -t main
+#        docker compose stop agent-daemon         # when done
+#
+# Profiles (each defaults to MI): WORKSPACE_PROFILE, GCLOUD_PROFILE,
+# WIREGUARD_PROFILE, KUBE_PROFILE. Or set WORKSPACE to an absolute host path.
+
+# Shared base for both services.
+x-agent: &agent
+  build:
+    context: .
+    dockerfile: Dockerfile
+  image: agent-box
+  platform: linux/arm64
+  init: true
+  stdin_open: true
+  tty: true
+  working_dir: /workspace
+
+  # WireGuard needs these. Drop NET_ADMIN + /dev/net/tun if you don't tunnel.
+  cap_add:
+    - NET_ADMIN
+  devices:
+    - /dev/net/tun
+  sysctls:
+    - net.ipv4.ip_forward=1
+
+  volumes:
+    # Project: pick a profile dir with WORKSPACE_PROFILE, or set WORKSPACE to an
+    # absolute host path to mount something outside ./workspaces/.
+    - ${WORKSPACE:-./workspaces/${WORKSPACE_PROFILE:-MI}}:/workspace
+    # Per-container config (NOT the host defaults). GCLOUD_PROFILE mounts a
+    # subdir; WIREGUARD_PROFILE / KUBE_PROFILE select a file inside the dir.
+    - ./configs/gcloud/${GCLOUD_PROFILE:-MI}:/home/agent/.config/gcloud
+    - ./configs/kube:/home/agent/.kube
+    - ./configs/opencode:/home/agent/.config/opencode
+    - ./configs/cursor:/home/agent/.cursor
+    - ./configs/wireguard:/etc/wireguard
+    # Host Docker daemon (build/push from inside the container).
+    - /var/run/docker.sock:/var/run/docker.sock
+
+  environment:
+    # opencode configs reference these via {env:...}; set in .env or your shell.
+    - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+    - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+    - OPENCODE_API_KEY=${OPENCODE_API_KEY:-}
+    - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+    - CURSOR_API_KEY=${CURSOR_API_KEY:-}
+    # GitHub: a classic PAT (ghp_...) authenticates `gh` and `git` over HTTPS.
+    - GH_TOKEN=${GH_TOKEN:-}
+    - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+    # Profile selection (each defaults to MI).
+    - GCLOUD_PROFILE=${GCLOUD_PROFILE:-MI}
+    - WIREGUARD_PROFILE=${WIREGUARD_PROFILE:-MI}
+    - KUBE_PROFILE=${KUBE_PROFILE:-MI}
+    - KUBECONFIG=/home/agent/.kube/${KUBE_PROFILE:-MI}
+    - GOCACHE=/workspace/.cache/go-build
+    - GOPATH=/home/agent/go
+
+services:
+  # Long-lived: keeps the container (and any tmux server you start inside it)
+  # alive across multiple `docker compose exec` sessions. Use `--user agent` on
+  # exec so shells/tmux run as the unprivileged user (the entrypoint already
+  # ran as root to bring up WireGuard).
+  agent-daemon:
+    <<: *agent
+    command: ["sleep", "infinity"]

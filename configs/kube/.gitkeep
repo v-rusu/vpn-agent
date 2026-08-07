@@ -1,0 +1,4 @@
+# Place your kubeconfig here. Bind-mounted to /home/agent/.kube in the container.
+# Copy from your host:  cp ~/.kube/config configs/kube/config
+# NOTE: server addresses referencing localhost/127.0.0.1 will not resolve inside
+# the container. Use real host IPs or DNS names reachable from the container.
