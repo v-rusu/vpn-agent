@@ -17,3 +17,6 @@ configs/cursor/*
 *.swp
 .idea/
 .vscode/
+
+agent-bashrc.sh
+.tmux

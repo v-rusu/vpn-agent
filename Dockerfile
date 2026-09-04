@@ -200,12 +200,38 @@ ENV GOPATH=/home/agent/go
 ENV GOROOT=/usr/local/go
 ENV EDITOR=vim
 
-# gcloud + kubectl shell completion for bash.
-RUN echo 'source /usr/lib/google-cloud-sdk/completion.bash.inc 2>/dev/null' \
+# gcloud + kubectl shell completion for bash, plus sourcing of persistent
+# shell helpers: image-level from ~/.bashrc.d/*.sh, then per-workspace
+# /workspace/.bashrc (one file per workspace) and any /workspace/.bashrc.d/*.sh
+# fragments. Workspace files need no rebuild — just edit and open a new shell.
+RUN echo 'source /usr/local/google-cloud-sdk/completion.bash.inc 2>/dev/null' \
         >> /home/agent/.bashrc \
     && echo 'source <(kubectl completion bash) 2>/dev/null' \
         >> /home/agent/.bashrc \
+    && printf '\n# persistent shell helpers (image) + per-workspace overrides\n' \
+        >> /home/agent/.bashrc \
+    && printf 'for f in /home/agent/.bashrc.d/*.sh; do [ -r "$f" ] && . "$f"; done\n' \
+        >> /home/agent/.bashrc \
+    && printf '[ -r /workspace/.bashrc ] && . /workspace/.bashrc\n' \
+        >> /home/agent/.bashrc \
+    && printf 'for f in /workspace/.bashrc.d/*.sh; do [ -r "$f" ] && . "$f"; done\n' \
+        >> /home/agent/.bashrc \
     && chown -R agent:agent /home/agent
+
+# Persistent shell helpers (tmux session + agent resume shortcuts).
+COPY --chown=agent:agent agent-bashrc.sh /home/agent/.bashrc.d/10-sessions.sh
+
+# Persist opencode session data across container recreation/rebuilds by
+# pointing its data dir into the ALREADY-MOUNTED ~/.config/opencode volume
+# (lands in configs/opencode/data on the host). Without this, opencode
+# conversations die with the container and `opencode --continue` has nothing
+# to resume. Cursor chats already persist via the ~/.cursor mount.
+USER agent
+RUN mkdir -p "$HOME/.local/share" \
+ && rm -rf "$HOME/.local/share/opencode" \
+ && ln -sfn "$HOME/.config/opencode/data" "$HOME/.local/share/opencode" \
+ && test "$(readlink "$HOME/.local/share/opencode")" = "$HOME/.config/opencode/data"
+USER root
 
 # ----------------------------------------------------------------------------
 # 11. Entrypoint + resolvconf shim (kept last so edits don't invalidate the

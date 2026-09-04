@@ -65,6 +65,13 @@ if [[ -d /home/agent/.config/opencode ]]; then
 fi
 
 # ---------------------------------------------------------------------------
+# opencode persisted data: ~/.local/share/opencode is a symlink into the
+# mounted ~/.config/opencode (=> configs/opencode/data on the host). Make sure
+# the target dir exists so sessions survive container recreation.
+# ---------------------------------------------------------------------------
+gosu agent mkdir -p /home/agent/.config/opencode/data 2>/dev/null || true
+
+# ---------------------------------------------------------------------------
 # Drop privileges and exec the command (default: bash).
 # ---------------------------------------------------------------------------
 log "Dropping to user 'agent'; running: $*"
