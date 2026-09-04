@@ -20,3 +20,9 @@ configs/cursor/*
 
 agent-bashrc.sh
 .tmux
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
+.beads/proxieddb/

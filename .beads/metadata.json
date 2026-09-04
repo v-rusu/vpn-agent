@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "docker_for_agents",
+  "project_id": "6d498870-d118-4ef6-972a-2a9fdc941557"
+}
