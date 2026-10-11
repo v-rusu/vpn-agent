@@ -26,3 +26,12 @@ agent-bashrc.sh
 *.db
 .beads-credential-key
 .beads/proxieddb/
+
+# Prebuilt binaries copied into the image (scripts/fetch-solomonar.sh).
+bin/
+
+# Claude Code state (credentials + session transcripts) and Tailscale node
+# state, one dir per profile.
+configs/claude/
+configs/tailscale/
+/backups/

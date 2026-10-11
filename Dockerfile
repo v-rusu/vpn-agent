@@ -8,6 +8,33 @@
 #
 # All secrets/configs are bind-mounted at runtime (see docker-compose.yml),
 # never baked into the image.
+#
+# Prerequisite: bin/solomonar-linux-arm64 must exist in the build context —
+# run scripts/fetch-solomonar.sh first (it is gitignored, not checked in).
+
+ARG TMUX_VERSION=3.7b
+
+# ----------------------------------------------------------------------------
+# Builder: tmux from the upstream release tarball. Ubuntu 24.04 ships 3.4;
+# solomonar needs >= 3.2 and the fleet relies on 3.7 features. Installed into
+# /out/usr/local and copied into the final image (runtime deps: libevent-core,
+# libtinfo — both pulled in below).
+# ----------------------------------------------------------------------------
+FROM ubuntu:24.04 AS tmux-build
+ARG TMUX_VERSION
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates curl build-essential pkg-config bison \
+        libevent-dev libncurses-dev \
+    && rm -rf /var/lib/apt/lists/*
+RUN set -eux; \
+    curl -fsSL "https://github.com/tmux/tmux/releases/download/${TMUX_VERSION}/tmux-${TMUX_VERSION}.tar.gz" \
+        | tar -xz -C /tmp; \
+    cd "/tmp/tmux-${TMUX_VERSION}"; \
+    ./configure --prefix=/usr/local; \
+    make -j"$(nproc)"; \
+    make install DESTDIR=/out; \
+    /out/usr/local/bin/tmux -V
 
 FROM ubuntu:24.04
 
@@ -15,6 +42,8 @@ ARG NODE_MAJOR=22
 ARG PYTHON_VERSION=3.14
 ARG GO_VERSION=1.26.5
 ARG KUBECTL_VERSION=v1.36.3
+ARG CLAUDE_CODE_VERSION=2.1.284
+ARG TAILSCALE_VERSION=1.104.1
 ARG AGENT_UID=1000
 ARG AGENT_GID=1000
 
@@ -35,7 +64,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         software-properties-common apt-transport-https \
         git openssh-client build-essential gcc g++ make pkg-config \
         ripgrep fd-find jq zip unzip tar gzip xz-utils \
-        less file vim tmux sudo gosu procps iproute2 \
+        less file vim sudo gosu procps iproute2 \
+        libevent-core-2.1-7t64 libtinfo6 \
         htop tree man-db \
         wireguard-tools iptables \
     && ln -sf "$(command -v fdfind)" /usr/local/bin/fd \
@@ -136,6 +166,20 @@ RUN set -eux; \
     rm -rf /var/lib/apt/lists/*
 
 # ----------------------------------------------------------------------------
+# 7b. Tailscale (official apt repo, pinned). tailscaled is started by the
+#     entrypoint only when TAILSCALE_ENABLE=1 or saved state exists.
+# ----------------------------------------------------------------------------
+RUN set -eux; \
+    . /etc/os-release; \
+    curl -fsSL "https://pkgs.tailscale.com/stable/ubuntu/${UBUNTU_CODENAME}.noarmor.gpg" \
+        -o /usr/share/keyrings/tailscale-archive-keyring.gpg; \
+    curl -fsSL "https://pkgs.tailscale.com/stable/ubuntu/${UBUNTU_CODENAME}.tailscale-keyring.list" \
+        -o /etc/apt/sources.list.d/tailscale.list; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends "tailscale=${TAILSCALE_VERSION}"; \
+    rm -rf /var/lib/apt/lists/*
+
+# ----------------------------------------------------------------------------
 # 8. yq (mikefarah/yq)
 # ----------------------------------------------------------------------------
 RUN set -eux; \
@@ -147,9 +191,12 @@ RUN set -eux; \
     rm -rf /tmp/yq-install
 
 # ----------------------------------------------------------------------------
-# 9. Agent tooling: opencode + beads (bd)
+# 9. Agent tooling: opencode + beads (bd) + Claude Code (pinned)
 # ----------------------------------------------------------------------------
-RUN npm install -g opencode-ai @beads/bd
+RUN npm install -g opencode-ai @beads/bd "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
+
+# tmux built from source in the tmux-build stage (see top of file).
+COPY --from=tmux-build /out/usr/local/ /usr/local/
 
 # ----------------------------------------------------------------------------
 # 10. Non-root user + environment
@@ -165,7 +212,7 @@ RUN set -eux; \
     # where the socket is root:root mode 0660. On a Linux host with a
     # 'docker' group, pass its gid via --group-add instead (see README).
     && useradd -m -u ${AGENT_UID} -g ${AGENT_GID} -G root -s /bin/bash agent \
-    && install -d -o agent -g agent /home/agent/.config /home/agent/.local/bin \
+    && install -d -o agent -g agent /home/agent/.config /home/agent/.local/bin /home/agent/.claude \
     # Reclaim ownership of /home/agent: earlier RUN steps (e.g. npm postinstall
     # hooks that respect HOME) may have created files here as root before the
     # agent user existed, which would block the agent from writing to its home.
@@ -221,6 +268,20 @@ RUN echo 'source /usr/local/google-cloud-sdk/completion.bash.inc 2>/dev/null' \
 # Persistent shell helpers (tmux session + agent resume shortcuts).
 COPY --chown=agent:agent agent-bashrc.sh /home/agent/.bashrc.d/10-sessions.sh
 
+# Login shells (tmux panes run `-bash`, `bash -lc`) must read ~/.bashrc too,
+# otherwise PATH (~/.local/bin, go, gcloud) and the helpers above are missing.
+RUN printf '%s\n' \
+        '# login shells: read the interactive config too (PATH, helpers)' \
+        'if [ -n "$BASH_VERSION" ] && [ -f "$HOME/.bashrc" ]; then . "$HOME/.bashrc"; fi' \
+        > /home/agent/.profile \
+    && chown agent:agent /home/agent/.profile
+
+# Claude Code keeps ALL of its state under one dir when CLAUDE_CONFIG_DIR is
+# set — including the global .claude.json that otherwise lives at
+# ~/.claude.json. docker-compose.yml bind-mounts configs/claude/<PROFILE> here,
+# so credentials, settings and session transcripts survive container recreate.
+ENV CLAUDE_CONFIG_DIR=/home/agent/.claude
+
 # Persist opencode session data across container recreation/rebuilds by
 # pointing its data dir into the ALREADY-MOUNTED ~/.config/opencode volume
 # (lands in configs/opencode/data on the host). Without this, opencode
@@ -241,6 +302,12 @@ COPY resolvconf-shim.sh /usr/local/sbin/resolvconf
 RUN chmod +x /usr/local/sbin/resolvconf
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
+
+# solomonar (`sol`): prebuilt linux/arm64 binary from the build context.
+# Build it with scripts/fetch-solomonar.sh. Last, because it changes often.
+COPY bin/solomonar-linux-arm64 /usr/local/bin/solomonar
+RUN chmod 0755 /usr/local/bin/solomonar \
+    && ln -sf solomonar /usr/local/bin/sol
 
 WORKDIR /workspace
 VOLUME /workspace

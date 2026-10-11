@@ -12,8 +12,13 @@
 #        docker compose exec --user agent agent-daemon tmux attach -t main
 #        docker compose stop agent-daemon         # when done
 #
-# Profiles (each defaults to MI): WORKSPACE_PROFILE, GCLOUD_PROFILE,
-# WIREGUARD_PROFILE, KUBE_PROFILE. Or set WORKSPACE to an absolute host path.
+# Profiles: WORKSPACE_PROFILE (default MI) picks the workspace; GCLOUD_PROFILE,
+# KUBE_PROFILE, WIREGUARD_PROFILE, CLAUDE_PROFILE and TAILSCALE_PROFILE each
+# default to WORKSPACE_PROFILE. Or set WORKSPACE to an absolute host path.
+#
+# One long-lived container per profile (separate compose projects):
+#   docker compose -p em-agent --env-file .env --env-file profiles/EM.env up -d agent-daemon
+# (see profiles/*.env and README "Profiles").
 
 # Shared base for both services.
 x-agent: &agent
@@ -27,7 +32,7 @@ x-agent: &agent
   tty: true
   working_dir: /workspace
 
-  # WireGuard needs these. Drop NET_ADMIN + /dev/net/tun if you don't tunnel.
+  # WireGuard + Tailscale (kernel mode) need these.
   cap_add:
     - NET_ADMIN
   devices:
@@ -41,11 +46,17 @@ x-agent: &agent
     - ${WORKSPACE:-./workspaces/${WORKSPACE_PROFILE:-MI}}:/workspace
     # Per-container config (NOT the host defaults). GCLOUD_PROFILE mounts a
     # subdir; WIREGUARD_PROFILE / KUBE_PROFILE select a file inside the dir.
-    - ./configs/gcloud/${GCLOUD_PROFILE:-MI}:/home/agent/.config/gcloud
+    # Missing host dirs (e.g. configs/gcloud/EM on first run) are created empty.
+    - ./configs/gcloud/${GCLOUD_PROFILE:-${WORKSPACE_PROFILE:-MI}}:/home/agent/.config/gcloud
     - ./configs/kube:/home/agent/.kube
     - ./configs/opencode:/home/agent/.config/opencode
     - ./configs/cursor:/home/agent/.cursor
     - ./configs/wireguard:/etc/wireguard
+    # Claude Code state: credentials, settings, session transcripts AND the
+    # global .claude.json (CLAUDE_CONFIG_DIR points here, see Dockerfile).
+    - ./configs/claude/${CLAUDE_PROFILE:-${WORKSPACE_PROFILE:-MI}}:/home/agent/.claude
+    # Tailscale node state (used only when TAILSCALE_ENABLE=1 or state exists).
+    - ./configs/tailscale/${TAILSCALE_PROFILE:-${WORKSPACE_PROFILE:-MI}}:/var/lib/tailscale
     # Host Docker daemon (build/push from inside the container).
     - /var/run/docker.sock:/var/run/docker.sock
 
@@ -59,11 +70,21 @@ x-agent: &agent
     # GitHub: a classic PAT (ghp_...) authenticates `gh` and `git` over HTTPS.
     - GH_TOKEN=${GH_TOKEN:-}
     - GITHUB_TOKEN=${GITHUB_TOKEN:-}
-    # Profile selection (each defaults to MI).
-    - GCLOUD_PROFILE=${GCLOUD_PROFILE:-MI}
-    - WIREGUARD_PROFILE=${WIREGUARD_PROFILE:-MI}
-    - KUBE_PROFILE=${KUBE_PROFILE:-MI}
-    - KUBECONFIG=/home/agent/.kube/${KUBE_PROFILE:-MI}
+    # Profile selection (each defaults to WORKSPACE_PROFILE, which defaults to MI).
+    - WORKSPACE_PROFILE=${WORKSPACE_PROFILE:-MI}
+    - GCLOUD_PROFILE=${GCLOUD_PROFILE:-${WORKSPACE_PROFILE:-MI}}
+    # WireGuard: <P> -> /etc/wireguard/<P>.conf only (missing file = no tunnel);
+    # "none" opts out; explicitly empty = legacy fallback (wg0.conf / any *.conf).
+    - WIREGUARD_PROFILE=${WIREGUARD_PROFILE-${WORKSPACE_PROFILE:-MI}}
+    - KUBE_PROFILE=${KUBE_PROFILE:-${WORKSPACE_PROFILE:-MI}}
+    - KUBECONFIG=/home/agent/.kube/${KUBE_PROFILE:-${WORKSPACE_PROFILE:-MI}}
+    - CLAUDE_PROFILE=${CLAUDE_PROFILE:-${WORKSPACE_PROFILE:-MI}}
+    # Tailscale: started only when TAILSCALE_ENABLE=1 (or saved state exists).
+    - TAILSCALE_ENABLE=${TAILSCALE_ENABLE:-0}
+    - TAILSCALE_PROFILE=${TAILSCALE_PROFILE:-${WORKSPACE_PROFILE:-MI}}
+    - TAILSCALE_HOSTNAME=${TAILSCALE_HOSTNAME:-}
+    - TAILSCALE_EXTRA_ARGS=${TAILSCALE_EXTRA_ARGS:-}
+    - TS_AUTHKEY=${TS_AUTHKEY:-}
     - GOCACHE=/workspace/.cache/go-build
     - GOPATH=/home/agent/go
 
