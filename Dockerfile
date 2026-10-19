@@ -1,7 +1,8 @@
 # syntax=docker/dockerfile:1
 #
 # Agentic dev environment image.
-# Target: linux/arm64 (Apple Silicon). Also builds for linux/amd64.
+# Targets: linux/arm64 (Apple Silicon) and linux/amd64 — whatever the building
+# host is (BuildKit's TARGETARCH).
 #
 # Build:
 #   docker build -t agent-box .
@@ -9,7 +10,7 @@
 # All secrets/configs are bind-mounted at runtime (see docker-compose.yml),
 # never baked into the image.
 #
-# Prerequisite: bin/solomonar-linux-arm64 must exist in the build context —
+# Prerequisite: bin/solomonar-linux-<arch> must exist in the build context —
 # run scripts/fetch-solomonar.sh first (it is gitignored, not checked in).
 
 ARG TMUX_VERSION=3.7b
@@ -303,9 +304,11 @@ RUN chmod +x /usr/local/sbin/resolvconf
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
-# solomonar (`sol`): prebuilt linux/arm64 binary from the build context.
-# Build it with scripts/fetch-solomonar.sh. Last, because it changes often.
-COPY bin/solomonar-linux-arm64 /usr/local/bin/solomonar
+# solomonar (`sol`): prebuilt binary for the target arch from the build
+# context. Build it with scripts/fetch-solomonar.sh. Last, because it changes
+# often.
+ARG TARGETARCH
+COPY bin/solomonar-linux-${TARGETARCH} /usr/local/bin/solomonar
 RUN chmod 0755 /usr/local/bin/solomonar \
     && ln -sf solomonar /usr/local/bin/sol
 

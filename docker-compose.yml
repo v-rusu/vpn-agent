@@ -26,7 +26,8 @@ x-agent: &agent
     context: .
     dockerfile: Dockerfile
   image: agent-box
-  platform: linux/arm64
+  # No platform pin: the image builds and runs natively on the host's arch
+  # (arm64 on Apple Silicon, amd64 on a Linux workstation).
   init: true
   stdin_open: true
   tty: true

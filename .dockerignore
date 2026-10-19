@@ -7,3 +7,7 @@ configs/
 README.md
 docker-compose.yml
 **/.DS_Store
+
+# Runtime data: never part of the build (and huge).
+workspaces/
+backups/

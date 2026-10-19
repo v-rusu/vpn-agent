@@ -1,7 +1,7 @@
 # agent-box
 
 A self-contained Linux image for agentic software development, built for
-**Apple Silicon** (`linux/arm64`). One image, all the tooling, ready to run
+**Apple Silicon** (`linux/arm64`) and Linux workstations (`linux/amd64`). One image, all the tooling, ready to run
 on your Mac via Docker Desktop.
 
 ## What's inside
@@ -11,7 +11,7 @@ on your Mac via Docker Desktop.
 | Languages | Node.js 22, Python 3.14 (deadsnakes), Go, `uv`, `bun` |
 | Cloud / k8s | `gcloud` (Google Cloud SDK), `kubectl` |
 | Agents | `claude` (Claude Code, pinned), `opencode` (`opencode-ai`), `bd` (beads), `agent` (Cursor terminal agent) |
-| Fleet | `sol` / `solomonar` (prebuilt linux/arm64 binary from a local checkout) |
+| Fleet | `sol` / `solomonar` (prebuilt linux binary for the image's arch, from a local checkout) |
 | Networking | `wireguard-tools`, `tailscale` + `tailscaled` (pinned), `iptables`, resolvconf shim |
 | Dev utilities | `git`, `gh`, `ripgrep`, `fd`, `jq`, `yq`, `tmux` 3.7b (built from source), `vim`, `build-essential`, Docker CLI + buildx + compose |
 | Shell | `bash` (runs as unprivileged user `agent`) |
