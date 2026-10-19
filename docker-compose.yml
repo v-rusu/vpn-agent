@@ -97,3 +97,7 @@ services:
   agent-daemon:
     <<: *agent
     command: ["sleep", "infinity"]
+    # Back after a host reboot or a Docker restart — unless it was stopped
+    # on purpose (docker stop / compose stop), which sticks across reboots.
+    # The fleet inside comes back with `sol resume` (tmux-os: tos.sh boot).
+    restart: unless-stopped
